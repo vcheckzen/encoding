@@ -127,7 +127,7 @@ The following is the Base58 code table.
 | 52    | u         | 53    | v         | 54    | w         | 55    | x         |
 | 56    | y         | 57    | z         |
 
-As mentioned above, the essence of BaseN encoding is to treat the data as an integer and convert it to the N format. There are 256 extended ASCII characters, so a string encoded in ASCII can be treated as a 256-entry integer. For example, the string `js` can be treated as a 256-entry integer with the decimal size `ascii(j) * 10 + ascii(s) = 106 * 10 + 115 = 1175 = 20 * 58`, so it has only one bit in the 58-entry system, the bit value 20, which is represented by the letter `M` by looking up the Base58 table.
+As mentioned above, the essence of BaseN encoding is to treat the data as an integer and convert it to the N format. There are 256 extended ASCII characters, so a string encoded in ASCII can be treated as a 256-entry integer. For example, the string `js` can be treated as a 256-entry integer with the decimal size `ascii(j) * 256 + ascii(s) = 106 * 256 + 115 = 27251 = 8 * 58^2 + 5 * 58^1 + 49`, so it has 3 bits in the 58-entry system, and its bit values are 8, 5, and 49 respectively, and the encoded string is `96r` which can be translated looking up the Base58 table.
 
 One problem with the above approach is that if the ASCII encoded string has a number of `\0` prefixes, since `ascii(\0) = 0`, these `\0`s do not affect the size of the value if the string is treated as a 256-entry integer, e.g., decimal `00012345 = 12345`. That is, if the encoding is exactly according to the binary conversion method, the leading zero value will be lost, although the leading zero does not affect the size of the integer, but in the original binary data must have its existence, the loss is what we do not want to see. For this reason, the number of leading zeros can be counted before conversion, and the same number of leading zeros can be added after conversion, so that the information can be encoded without loss.
 
@@ -171,9 +171,11 @@ In theory, Base64 can also be converted using the above generic methods, but the
 
 For binary to octal, just look at every 3 bits as a group, whose decimal value is an octal bit. For binary to hexadecimal, just look at every 4 bits as a group, and the decimal value will be a hexadecimal bit. And so on, for binary to 64, just look at every 6 bits as a group, and the decimal value will be a 64-bit.
 
-Therefore, to convert any binary data (expressed as an array of bytes) to Base64, you only need to use every 6 bits as a group to get the code point in 64-entry system, and get the corresponding character by looking up the table. Conversely, to decode a Base64 string into binary data, simply group the binary strings of the code point sequence in groups of 8 bits to get the corresponding bytes.
+Therefore, to convert any binary data (expressed as an array of bytes) to Base64, you only need to use every 6 bits as a group to get the code point in 64-entry system, and get the corresponding character by looking up the table. On the other hand, to decode a Base64 string into binary data, you only need to extend each code point to 6-bit binary in turn, and then group them into 8-bit groups to get the corresponding bytes.
 
-It should be noted that n-byte binary data has 8n bits, and if it is not divisible by 6, the last group needs to be supplemented by `6 - 8n % 6` zeros in groups of 6. In the Base64 standard, since `8n % 6 = 4n % 3`, the remainder `r` may be `0, 1, 2`, and at least `3 - r` full zero bytes (eight bits) need to be filled for the binary data to ensure that the data can be divided into integer 6-bit groups. Since the least common multiple of 8 and 6 is 24, each `3 = 24 / 8` bytes can be treated as a minimum batch unit and encoded as `4 = 24 / 6` Base64 code points. The standard specifies that the final all-zero 6-bit group, which is formed entirely by padding, should be encoded as `=`.
+Note that n-byte binary data has 8n bits, and if it is not divisible by 6, the last group of 6 bits is supplemented by `6 - 8n % 6` bits of zeros, but in the Base64 standard, in order to fill an integer byte (eight bits), and in order for the number of padded bytes to be directly visible in the encoding, it is specified that the last few groups of all-zero 6 bits, which is formed entirely by padding, is encoded as `=`, whose number is equal to the number of padded bytes.
+
+Noting that `r = 8n % 6`, no padding is required when it is `0`, otherwise `k` bytes are padded, then the number of remaining bits plus the number of padded bits equals `r + 8k = 6 + 6k`, which solves for `k = 3 - r/2`. Since `0 < r < 6`, `0 < r / 2 < 3`, only `1, 2` can be taken. When `r/2 = 1`, it is necessary to pad `2` bytes, and the 6-bit group formed entirely by padding is also equal to `2`. When `r/2 = 2`, `1` byte is required, and the 6-bit group formed entirely from the padding is also equal to `1`. Since the least common multiple of 8 and 6 is 24, each `3 = 24 / 8` bytes can be treated as a least batch unit encoded as `4 = 24 / 6` Base64 code points.
 
 As an example, the text `A` has an ASCII code of 65, binary `0100 0001`, and occupies 1 byte. When encoded as Base64, it is filled with `3 - 4 % 3 = 2` full zero bytes, which becomes `0100 0001 0000 0000 0000 0000`. Encoded as Base64 in a group of 6 bits, there are exactly 4 code points, which are
 
@@ -329,7 +331,7 @@ module.exports = class Url {
     for (let i = 0; i < encoded.length; ) {
       if (encoded[i] === '%') {
         const utfBuf = [];
-        while (encoded[i] === '%') {
+        while (i < encoded.length && encoded[i] === '%') {
           utfBuf.push(parseInt(encoded.slice(i + 1, i + 3), 16));
           i += 3;
         }

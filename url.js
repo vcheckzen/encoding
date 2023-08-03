@@ -26,7 +26,7 @@ module.exports = class Url {
     for (let i = 0; i < encoded.length; ) {
       if (encoded[i] === '%') {
         const utfBuf = [];
-        while (encoded[i] === '%') {
+        while (i < encoded.length && encoded[i] === '%') {
           utfBuf.push(parseInt(encoded.slice(i + 1, i + 3), 16));
           i += 3;
         }
